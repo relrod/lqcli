@@ -102,16 +102,15 @@ async fn main() {
                 // Get the filtered sources by tags
                 // source.tags will be a Tags(Option<Vec<String>>)
                 let filtered_sources = config.filtered_sources(&tags.unwrap_or_default());
+
                 for source in filtered_sources {
-                    let resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
-                    match resp {
-                        Ok(titles) => {
-                            println!("{}: {}", source.name, titles.join(", "));
-                        }
-                        Err(e) => {
-                            eprintln!("Error getting lesson titles for {}: {}", source.name, e);
-                        }
-                    }
+                    let lesson_titles_resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
+                    let lesson_titles = lesson_titles_resp.unwrap_or_else(|e| {
+                        eprintln!("Error getting lesson titles for {}: {}", source.name, e);
+                        vec![]
+                    });
+
+                    println!("{}: {}", source.name, lesson_titles.join(", "));
 
                     // let resp = openai::postprocess(
                     //     "hallo das hier ist ein test",
