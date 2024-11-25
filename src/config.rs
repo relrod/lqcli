@@ -118,7 +118,7 @@ pub struct Source {
     pub download_method: String,
 
     /// The URL containing to the feed or page to scrape
-    #[tabled(order = 2)]
+    #[tabled(skip)]
     pub url: String,
 
     /// The name of the fetcher, mostly just for display purposes on the CLI
@@ -133,6 +133,10 @@ pub struct Source {
     /// The course ID to create a lesson in for each fetched item from this
     /// source.
     pub course_id: u64,
+
+    /// The two-letter language code. The LingQ API uses this because course IDs
+    /// are unique per language.
+    pub language: String,
 
     /// Tags allow you to group sources. One place where this could be useful
     /// is to tag sources that are known to update daily vs multiple times a

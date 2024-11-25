@@ -1,10 +1,20 @@
 mod config;
 mod openai;
+mod lingq;
 
-use clap::builder::styling::{AnsiColor, Effects, Styles};
-use clap::{Parser, Subcommand};
+use clap::{
+    builder::styling::{AnsiColor, Effects, Styles},
+    Parser, Subcommand,
+};
 use owo_colors::OwoColorize;
-use tabled::{Table, settings::Style};
+use tabled::{
+    settings::{
+        style::HorizontalLine,
+        object::Rows,
+        Color, Style,
+    },
+    Table,
+};
 
 fn styles() -> Styles {
     Styles::styled()
@@ -68,6 +78,8 @@ async fn main() {
         }
     };
 
+    let lingq_client = lingq::LingqClient::new(&config.lingq);
+
     match cli.subcommand {
         MainSubcommand::Sources(subcommand) => match subcommand {
             SourcesSubcommand::Sync { tags, dry_run } => {
@@ -86,16 +98,31 @@ async fn main() {
                 });
                 if dry_run {
                     println!("Would synchronize the following sources:");
-                    let mut table = Table::new(filtered_sources);
-                    table.with(Style::modern());
+                    let mut table = Table::new(filtered_sources.clone());
+                    let style = Style::modern()
+                        .horizontals([(1, HorizontalLine::inherit(Style::modern()).horizontal('═'))]);
+                    table.with(style)
+                        .modify(Rows::first(), Color::BOLD);
                     println!("{}", table);
 
-                    let resp = openai::postprocess(
-                        "This is a test.",
-                        config.openai.postprocessing_prompt.as_str(),
-                        &config.openai
-                    ).await.unwrap();
-                    println!("{}", resp);
+                    for source in filtered_sources {
+                        let resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
+                        match resp {
+                            Ok(titles) => {
+                                println!("{}: {}", source.name, titles.join(", "));
+                            }
+                            Err(e) => {
+                                eprintln!("Error getting lesson titles for {}: {}", source.name, e);
+                            }
+                        }
+                    }
+
+                    // let resp = openai::postprocess(
+                    //     "hallo das hier ist ein test",
+                    //     config.openai.postprocessing_prompt.as_str(),
+                    //     &config.openai
+                    // ).await.unwrap();
+                    // println!("{}", resp);
                 } else {
                     println!("Synchronizing sources:");
                 }
