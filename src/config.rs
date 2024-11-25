@@ -208,4 +208,17 @@ impl LqcliConfig {
         let normalized_path = shellexpand::tilde(path).to_string();
         std::path::Path::new(&normalized_path).exists()
     }
+
+    pub fn filtered_sources(&self, tags: &[String]) -> Vec<&Source> {
+        if tags.is_empty() {
+            return self.sources.iter().collect();
+        }
+        self.sources.iter().filter(|source| {
+            if let Some(source_tags) = &source.tags.0 {
+                source_tags.iter().any(|tag| tags.contains(tag))
+            } else {
+                false
+            }
+        }).collect()
+    }
 }

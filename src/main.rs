@@ -57,6 +57,13 @@ enum SourcesSubcommand {
         #[arg(short, long, default_value = "false")]
         dry_run: bool,
     },
+
+    /// List sources, possibly filtered by tags
+    List {
+        /// Only list sources with these tags
+        #[arg(short, long)]
+        tags: Option<Vec<String>>,
+    },
 }
 
 #[tokio::main]
@@ -82,38 +89,27 @@ async fn main() {
 
     match cli.subcommand {
         MainSubcommand::Sources(subcommand) => match subcommand {
+            SourcesSubcommand::List { tags } => {
+                let filtered_sources = config.filtered_sources(&tags.unwrap_or_default());
+                let mut table = Table::new(filtered_sources.clone());
+                let style = Style::modern()
+                    .horizontals([(1, HorizontalLine::inherit(Style::modern()).horizontal('═'))]);
+                table.with(style)
+                    .modify(Rows::first(), Color::BOLD);
+                println!("{}", table);
+            }
             SourcesSubcommand::Sync { tags, dry_run } => {
                 // Get the filtered sources by tags
                 // source.tags will be a Tags(Option<Vec<String>>)
-                let filtered_sources = config.sources.iter().filter(|source| {
-                    tags.as_ref()
-                        .map(|tags| {
-                            source
-                                .tags
-                                .0
-                                .as_ref()
-                                .map_or(false, |source_tags| tags.iter().any(|tag| source_tags.contains(tag)))
-                        })
-                        .unwrap_or(true)
-                });
-                if dry_run {
-                    println!("Would synchronize the following sources:");
-                    let mut table = Table::new(filtered_sources.clone());
-                    let style = Style::modern()
-                        .horizontals([(1, HorizontalLine::inherit(Style::modern()).horizontal('═'))]);
-                    table.with(style)
-                        .modify(Rows::first(), Color::BOLD);
-                    println!("{}", table);
-
-                    for source in filtered_sources {
-                        let resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
-                        match resp {
-                            Ok(titles) => {
-                                println!("{}: {}", source.name, titles.join(", "));
-                            }
-                            Err(e) => {
-                                eprintln!("Error getting lesson titles for {}: {}", source.name, e);
-                            }
+                let filtered_sources = config.filtered_sources(&tags.unwrap_or_default());
+                for source in filtered_sources {
+                    let resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
+                    match resp {
+                        Ok(titles) => {
+                            println!("{}: {}", source.name, titles.join(", "));
+                        }
+                        Err(e) => {
+                            eprintln!("Error getting lesson titles for {}: {}", source.name, e);
                         }
                     }
 
@@ -123,8 +119,6 @@ async fn main() {
                     //     &config.openai
                     // ).await.unwrap();
                     // println!("{}", resp);
-                } else {
-                    println!("Synchronizing sources:");
                 }
             }
         },
