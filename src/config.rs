@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::fmt::Display;
 use tabled::Tabled;
 
 const DEFAULT_REQUEST_DELAY: u64 = 5;
@@ -21,7 +22,7 @@ paragraphs by speaker.
 You SHALL insert a blank line between paragraphs.";
 const DEFAULT_POSTPROCESSING_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_WHISPER_MODEL: &str = "whisper-1";
-const DEFAULT_CONTENT_TYPE: &str = "podcast";
+const DEFAULT_CONTENT_TYPE: SourceContentType = SourceContentType::Podcast;
 const DEFAULT_DOWNLOAD_METHOD: &str = "yt-dlp";
 const DEFAULT_TRANSCRIPT_VIA: &str = "openai";
 
@@ -105,7 +106,7 @@ pub struct Source {
     ///
     /// Current possible values are: podcast (default), youtube
     #[serde(default = "default_content_type")]
-    pub content_type: String,
+    pub content_type: SourceContentType,
 
     /// Download method
     ///
@@ -159,6 +160,13 @@ pub struct Source {
     pub transcript_via: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceContentType {
+    Podcast,
+    Youtube,
+}
+
 fn default_request_delay() -> u64 {
     DEFAULT_REQUEST_DELAY
 }
@@ -175,8 +183,8 @@ fn default_whisper_model() -> String {
     DEFAULT_WHISPER_MODEL.to_string()
 }
 
-fn default_content_type() -> String {
-    DEFAULT_CONTENT_TYPE.to_string()
+fn default_content_type() -> SourceContentType {
+    DEFAULT_CONTENT_TYPE
 }
 
 fn default_download_method() -> String {
@@ -187,13 +195,22 @@ fn default_transcript_via() -> String {
     DEFAULT_TRANSCRIPT_VIA.to_string()
 }
 
-impl std::fmt::Display for Tags {
+impl Display for Tags {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self.0 {
             Some(tags) => write!(f, "{}", tags.join(", ")),
             None => write!(f, ""),
         }?;
         Ok(())
+    }
+}
+
+impl Display for SourceContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SourceContentType::Podcast => write!(f, "podcast"),
+            SourceContentType::Youtube => write!(f, "youtube"),
+        }
     }
 }
 
