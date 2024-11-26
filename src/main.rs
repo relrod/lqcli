@@ -1,6 +1,7 @@
 mod config;
 mod openai;
 mod lingq;
+mod source;
 
 use clap::{
     builder::styling::{AnsiColor, Effects, Styles},
