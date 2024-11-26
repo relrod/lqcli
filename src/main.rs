@@ -110,8 +110,6 @@ async fn main() {
                         vec![]
                     });
 
-                    println!("{}: {}", source.name, lesson_titles.join(", "));
-
                     // let resp = openai::postprocess(
                     //     "hallo das hier ist ein test",
                     //     config.openai.postprocessing_prompt.as_str(),
