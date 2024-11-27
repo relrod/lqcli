@@ -105,11 +105,31 @@ async fn main() {
                 let filtered_sources = config.filtered_sources(&tags.unwrap_or_default());
 
                 for source in filtered_sources {
+                    println!("Syncing source: {}", source.name);
+
                     let lesson_titles_resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
                     let lesson_titles = lesson_titles_resp.unwrap_or_else(|e| {
                         eprintln!("Error getting lesson titles for {}: {}", source.name, e);
                         vec![]
                     });
+
+                    // Latest 5 items (this number should be configurable)
+                    let items = match source::SourceFeed::from_source(&source).await {
+                        Ok(feed) => feed.items(5),
+                        Err(e) => {
+                            eprintln!("Error getting items for {}: {}", source.name, e);
+                            continue;
+                        }
+                    };
+                    for item in items {
+                        // Get the audio url and print it, for now.
+                        let audio_link = item.get_audio_link(&source);
+                        if let Some(audio_link) = audio_link {
+                            println!("{}", audio_link);
+                        } else {
+                            eprintln!("No audio link found for {}", source.name);
+                        }
+                    }
 
                     // let resp = openai::postprocess(
                     //     "hallo das hier ist ein test",

@@ -1,11 +1,12 @@
+use atom_syndication::{Feed, Entry};
 use crate::config;
 use reqwest::Client;
-use rss::Item;
+use rss::{Channel, Item};
 use serde::Deserialize;
 use std::fmt::Display;
 use tabled::Tabled;
 
-const DEFAULT_CONTENT_TYPE: SourceContentType = SourceContentType::Podcast;
+const DEFAULT_CONTENT_TYPE: SourceContentType = SourceContentType::RssAtom;
 const DEFAULT_DOWNLOAD_METHOD: &str = "yt-dlp";
 const DEFAULT_TRANSCRIPT_VIA: &str = "openai";
 
@@ -18,11 +19,13 @@ pub struct Source {
     /// Content type
     ///
     /// This describes how to find the audio content for this source.
-    /// For example, a value of "podcast" would mean that lqcli needs to look
-    /// at the RSS feed for <enclosure> tags. "youtube" would mean that lqcli
-    /// is looking at the YouTube's RSS feed for videos, and so on.
     ///
-    /// Current possible values are: podcast (default), youtube
+    /// The default (rss_atom) will use heuristics to determine the content
+    /// type. It will try to parse the feed as an RSS feed first. If that fails,
+    /// it will try to parse it as an Atom feed. If RSS, it will look for
+    /// an enclosure and pull the link out that way. If Atom, it will look
+    /// for a link in the entry. In the future, other content types may be
+    /// added for special cases where this doesn't work.
     #[serde(default = "default_content_type")]
     pub content_type: SourceContentType,
 
@@ -81,8 +84,7 @@ pub struct Source {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceContentType {
-    Podcast,
-    Youtube,
+    RssAtom,
 }
 
 impl Display for Tags {
@@ -98,8 +100,30 @@ impl Display for Tags {
 impl Display for SourceContentType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            SourceContentType::Podcast => write!(f, "podcast"),
-            SourceContentType::Youtube => write!(f, "youtube"),
+            SourceContentType::RssAtom => write!(f, "RSS/Atom"),
+        }
+    }
+}
+
+pub enum SourceError {
+    FetchError(reqwest::Error),
+    // It would be nice to have an accumulating Result type where we can
+    // try multiple parsers and accumulate the errors if all of them fail.
+    // TODO.
+    ParseError(String),
+}
+
+impl From<reqwest::Error> for SourceError {
+    fn from(err: reqwest::Error) -> Self {
+        SourceError::FetchError(err)
+    }
+}
+
+impl std::fmt::Display for SourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SourceError::FetchError(err) => write!(f, "Fetch error: {}", err),
+            SourceError::ParseError(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
@@ -116,13 +140,66 @@ fn default_transcript_via() -> String {
     DEFAULT_TRANSCRIPT_VIA.to_string()
 }
 
-pub fn get_audio_link(source: &Source, item: &Item) -> Option<String> {
-    match source.content_type {
-        SourceContentType::Podcast => {
-            item.enclosure.as_ref().map(|enclosure| enclosure.url.clone())
+#[derive(Debug)]
+/// A source's feed can represent either an RSS feed or an Atom feed.
+pub enum SourceFeed {
+    Rss(Channel),
+    Atom(Feed),
+}
+
+#[derive(Debug)]
+/// When we parse the feed, we will either get an RSS item or an Atom entry.
+pub enum SourceItem {
+    Rss(Item),
+    Atom(Entry),
+}
+
+impl SourceFeed {
+    /// We don't know if a link is RSS or Atom. So first we try to parse it as
+    /// RSS. If that fails, we try to parse it as Atom.
+    pub async fn from_source(source: &Source) -> Result<Self, SourceError> {
+        let content = reqwest::get(&source.url).await?.bytes().await?;
+        rss::Channel::read_from(&content[..])
+            .map(SourceFeed::Rss)
+            .or_else(|_| {
+                atom_syndication::Feed::read_from(&content[..])
+                    .map(SourceFeed::Atom)
+            })
+            .map_err(|_| SourceError::ParseError("Could not parse as RSS or Atom feed".to_string()))
+    }
+
+    pub fn items(&self, count: usize) -> Vec<SourceItem> {
+        match self {
+            SourceFeed::Rss(channel) => channel
+                .items
+                .iter()
+                .take(count)
+                .map(|item| SourceItem::Rss(item.clone()))
+                .collect(),
+            SourceFeed::Atom(feed) => feed
+                .entries()
+                .iter()
+                .take(count)
+                .map(|entry| SourceItem::Atom(entry.clone()))
+                .collect(),
         }
-        SourceContentType::Youtube => {
-            item.link.clone()
+    }
+}
+
+impl SourceItem {
+    pub fn get_audio_link(&self, source: &Source) -> Option<String> {
+        match source.content_type {
+            SourceContentType::RssAtom => {
+                match self {
+                    SourceItem::Rss(item) => {
+                        item.enclosure.as_ref().map(|enclosure| enclosure.url.clone())
+                    }
+                    SourceItem::Atom(entry) => {
+                        entry.links().first().map(|link| link.href().to_string())
+                    }
+                }
+            }
+            _ => None,
         }
     }
 }

@@ -1016,6 +1016,7 @@ name = "lqcli"
 version = "0.1.0"
 dependencies = [
  "async-openai",
+ "atom_syndication",
  "clap",
  "owo-colors",
  "reqwest",
