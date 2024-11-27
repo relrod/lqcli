@@ -199,4 +199,11 @@ impl Item {
             }
         }
     }
+
+    pub fn title(&self) -> Option<String> {
+        match self {
+            Item::Rss(item) => item.title.clone(),
+            Item::Atom(entry) => Some(entry.title().to_string()),
+        }
+    }
 }

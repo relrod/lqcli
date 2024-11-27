@@ -124,7 +124,7 @@ async fn main() {
                         // Get the audio url and print it, for now.
                         let audio_link = item.get_audio_link(&source);
                         if let Some(audio_link) = audio_link {
-                            println!("{}", audio_link);
+                            println!("{}: {}", item.title().unwrap_or("<unknown>".to_string()), audio_link);
                         } else {
                             eprintln!("No audio link found for {}", source.name);
                         }
