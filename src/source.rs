@@ -1,12 +1,10 @@
-use atom_syndication::{Feed, Entry};
-use crate::config;
-use reqwest::Client;
-use rss::{Channel, Item};
+use atom_syndication::{Feed as AtomFeed, Entry};
+use rss::{Channel, Item as RssItem};
 use serde::Deserialize;
 use std::fmt::Display;
 use tabled::Tabled;
 
-const DEFAULT_CONTENT_TYPE: SourceContentType = SourceContentType::RssAtom;
+const DEFAULT_CONTENT_TYPE: ContentType = ContentType::RssAtom;
 const DEFAULT_DOWNLOAD_METHOD: &str = "yt-dlp";
 const DEFAULT_TRANSCRIPT_VIA: &str = "openai";
 
@@ -27,7 +25,7 @@ pub struct Source {
     /// for a link in the entry. In the future, other content types may be
     /// added for special cases where this doesn't work.
     #[serde(default = "default_content_type")]
-    pub content_type: SourceContentType,
+    pub content_type: ContentType,
 
     /// Download method
     ///
@@ -83,7 +81,7 @@ pub struct Source {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SourceContentType {
+pub enum ContentType {
     RssAtom,
 }
 
@@ -97,10 +95,10 @@ impl Display for Tags {
     }
 }
 
-impl Display for SourceContentType {
+impl Display for ContentType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            SourceContentType::RssAtom => write!(f, "RSS/Atom"),
+            ContentType::RssAtom => write!(f, "RSS/Atom"),
         }
     }
 }
@@ -128,7 +126,7 @@ impl std::fmt::Display for SourceError {
     }
 }
 
-fn default_content_type() -> SourceContentType {
+fn default_content_type() -> ContentType {
     DEFAULT_CONTENT_TYPE
 }
 
@@ -142,64 +140,63 @@ fn default_transcript_via() -> String {
 
 #[derive(Debug)]
 /// A source's feed can represent either an RSS feed or an Atom feed.
-pub enum SourceFeed {
+pub enum Feed {
     Rss(Channel),
-    Atom(Feed),
+    Atom(AtomFeed),
 }
 
 #[derive(Debug)]
 /// When we parse the feed, we will either get an RSS item or an Atom entry.
-pub enum SourceItem {
-    Rss(Item),
+pub enum Item {
+    Rss(RssItem),
     Atom(Entry),
 }
 
-impl SourceFeed {
+impl Feed {
     /// We don't know if a link is RSS or Atom. So first we try to parse it as
     /// RSS. If that fails, we try to parse it as Atom.
     pub async fn from_source(source: &Source) -> Result<Self, SourceError> {
         let content = reqwest::get(&source.url).await?.bytes().await?;
         rss::Channel::read_from(&content[..])
-            .map(SourceFeed::Rss)
+            .map(Feed::Rss)
             .or_else(|_| {
                 atom_syndication::Feed::read_from(&content[..])
-                    .map(SourceFeed::Atom)
+                    .map(Feed::Atom)
             })
             .map_err(|_| SourceError::ParseError("Could not parse as RSS or Atom feed".to_string()))
     }
 
-    pub fn items(&self, count: usize) -> Vec<SourceItem> {
+    pub fn items(&self, count: usize) -> Vec<Item> {
         match self {
-            SourceFeed::Rss(channel) => channel
+            Feed::Rss(channel) => channel
                 .items
                 .iter()
                 .take(count)
-                .map(|item| SourceItem::Rss(item.clone()))
+                .map(|item| Item::Rss(item.clone()))
                 .collect(),
-            SourceFeed::Atom(feed) => feed
+            Feed::Atom(feed) => feed
                 .entries()
                 .iter()
                 .take(count)
-                .map(|entry| SourceItem::Atom(entry.clone()))
+                .map(|entry| Item::Atom(entry.clone()))
                 .collect(),
         }
     }
 }
 
-impl SourceItem {
+impl Item {
     pub fn get_audio_link(&self, source: &Source) -> Option<String> {
         match source.content_type {
-            SourceContentType::RssAtom => {
+            ContentType::RssAtom => {
                 match self {
-                    SourceItem::Rss(item) => {
+                    Item::Rss(item) => {
                         item.enclosure.as_ref().map(|enclosure| enclosure.url.clone())
                     }
-                    SourceItem::Atom(entry) => {
+                    Item::Atom(entry) => {
                         entry.links().first().map(|link| link.href().to_string())
                     }
                 }
             }
-            _ => None,
         }
     }
 }

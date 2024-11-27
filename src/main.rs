@@ -7,7 +7,6 @@ use clap::{
     builder::styling::{AnsiColor, Effects, Styles},
     Parser, Subcommand,
 };
-use owo_colors::OwoColorize;
 use tabled::{
     settings::{
         style::HorizontalLine,
@@ -114,7 +113,7 @@ async fn main() {
                     });
 
                     // Latest 5 items (this number should be configurable)
-                    let items = match source::SourceFeed::from_source(&source).await {
+                    let items = match source::Feed::from_source(&source).await {
                         Ok(feed) => feed.items(5),
                         Err(e) => {
                             eprintln!("Error getting items for {}: {}", source.name, e);

@@ -3,7 +3,6 @@
 use crate::config;
 use reqwest::{Client, header};
 use serde::Deserialize;
-use thiserror::Error;
 
 pub struct LingqClient {
     client: Client,
