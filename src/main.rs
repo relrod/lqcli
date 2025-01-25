@@ -1,17 +1,20 @@
 mod config;
+mod fetch;
 mod openai;
 mod lingq;
 mod source;
 
 use clap::{
     builder::styling::{AnsiColor, Effects, Styles},
-    Parser, Subcommand,
+    Args, Parser, Subcommand,
 };
+use serde::Deserialize;
 use tabled::{
     settings::{
         style::HorizontalLine,
         object::Rows,
-        Color, Style,
+        Color,
+        Style,
     },
     Table,
 };
@@ -43,6 +46,28 @@ enum MainSubcommand {
     /// Import content from periodicals such as podcasts or YouTube channels
     #[command(subcommand)]
     Sources(SourcesSubcommand),
+
+    /// Import a single piece of content
+    Adhoc(AdhocSubcommand),
+}
+
+#[derive(Args, Debug)]
+struct AdhocSubcommand {
+    /// The URL of the content to import
+    url: String,
+    /// The name of the content to import
+    name: String,
+    /// The language code of the content to import
+    language: String,
+    /// The course ID to import the content into
+    course_id: u64,
+    /// Whether to transcribe and post-process the content with OpenAI.
+    /// Transcription is required for some platforms, but not for LingQ.
+    #[arg(long, short = 's', default_value = "false")]
+    skip_transcribe: bool,
+    /// How to download the content. Usually the default of "yt-dlp" is fine.
+    #[arg(long, short = 'm', default_value = "yt-dlp")]
+    download_method: fetch::DownloadMethod,
 }
 
 #[derive(Debug, Subcommand)]
@@ -88,6 +113,10 @@ async fn main() {
     let lingq_client = lingq::LingqClient::new(&config.lingq);
 
     match cli.subcommand {
+        MainSubcommand::Adhoc(args) => {
+            let item = source::SourceItem::from_url_and_title(args.url.clone(), args.name.clone());
+            let audio = item.download_audio(args.download_method).await.unwrap();
+        }
         MainSubcommand::Sources(subcommand) => match subcommand {
             SourcesSubcommand::List { tags } => {
                 let filtered_sources = config.filtered_sources(&tags.unwrap_or_default());
