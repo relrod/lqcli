@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::fmt::Display;
 use tabled::Tabled;
 
-const DEFAULT_CONTENT_TYPE: ContentType = ContentType::RssAtom;
+const DEFAULT_CONTENT_TYPE: ContentType = ContentType::Syndication;
 const DEFAULT_DOWNLOAD_METHOD: DownloadMethod = DownloadMethod::YtDlp;
 const DEFAULT_TRANSCRIPT_VIA: &str = "openai";
 
@@ -93,13 +93,13 @@ pub struct Source {
 #[serde(rename_all = "kebab-case")]
 pub enum ContentType {
     /// The content comes from some kind of syndication feed (RSS or Atom).
-    RssAtom,
+    Syndication,
 }
 
 impl Display for ContentType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ContentType::RssAtom => write!(f, "RSS/Atom"),
+            ContentType::Syndication => write!(f, "Syndication Feed"),
         }
     }
 }
