@@ -90,8 +90,9 @@ pub struct Source {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum ContentType {
+    /// The content comes from some kind of syndication feed (RSS or Atom).
     RssAtom,
 }
 
@@ -154,17 +155,25 @@ fn default_transcript_via() -> String {
 }
 
 #[derive(Debug)]
+pub struct StaticItem {
+    pub url: String,
+    pub title: String,
+}
+
+#[derive(Debug)]
+/// What kind of individual item are we dealing with?
+pub enum SourceItem {
+    Rss(RssItem),
+    Atom(Entry),
+    /// Just a static link to an audio file somewhere.
+    Static(StaticItem),
+}
+
+#[derive(Debug)]
 /// A source's feed can represent either an RSS feed or an Atom feed.
 pub enum Feed {
     Rss(Channel),
     Atom(AtomFeed),
-}
-
-#[derive(Debug)]
-/// When we parse the feed, we will either get an RSS item or an Atom entry.
-pub enum Item {
-    Rss(RssItem),
-    Atom(Entry),
 }
 
 impl Feed {
@@ -181,44 +190,48 @@ impl Feed {
             .map_err(|_| SourceError::ParseError("Could not parse as RSS or Atom feed".to_string()))
     }
 
-    pub fn items(&self, count: usize) -> Vec<Item> {
+    pub fn items(&self, count: usize) -> Vec<SourceItem> {
         match self {
             Feed::Rss(channel) => channel
                 .items
                 .iter()
                 .take(count)
-                .map(|item| Item::Rss(item.clone()))
+                .map(|item| SourceItem::Rss(item.clone()))
                 .collect(),
             Feed::Atom(feed) => feed
                 .entries()
                 .iter()
                 .take(count)
-                .map(|entry| Item::Atom(entry.clone()))
+                .map(|entry| SourceItem::Atom(entry.clone()))
                 .collect(),
         }
     }
 }
 
-impl Item {
-    pub fn get_audio_link(&self, source: &Source) -> Option<String> {
-        match source.content_type {
-            ContentType::RssAtom => {
-                match self {
-                    Item::Rss(item) => {
-                        item.enclosure.as_ref().map(|enclosure| enclosure.url.clone())
-                    }
-                    Item::Atom(entry) => {
-                        entry.links().first().map(|link| link.href().to_string())
-                    }
-                }
+impl SourceItem {
+    pub fn get_audio_link(&self) -> Option<String> {
+        match self {
+            SourceItem::Rss(item) => {
+                item.enclosure.as_ref().map(|enclosure| enclosure.url.clone())
             }
+            SourceItem::Atom(entry) => {
+                entry.links().first().map(|link| link.href().to_string())
+            }
+            SourceItem::Static(item) => Some(item.url.clone()),
         }
     }
 
     pub fn title(&self) -> Option<String> {
         match self {
-            Item::Rss(item) => item.title.clone(),
-            Item::Atom(entry) => Some(entry.title().to_string()),
+            SourceItem::Rss(item) => item.title.clone(),
+            SourceItem::Atom(entry) => Some(entry.title().to_string()),
+            SourceItem::Static(item) => Some(item.title.clone()),
         }
+    }
+
+    pub async fn download_audio(&self) -> Result<Vec<u8>, SourceError> {
+        let audio_link = self.get_audio_link().ok_or(SourceError::ParseError("No audio link found".to_string()))?;
+        let content = reqwest::get(&audio_link).await?.bytes().await?;
+        Ok(content.to_vec())
     }
 }
