@@ -4,6 +4,8 @@ use serde::Deserialize;
 use std::fmt::Display;
 use tabled::Tabled;
 
+use crate::fetch::{DownloadMethod, fetch};
+
 const DEFAULT_CONTENT_TYPE: ContentType = ContentType::Syndication;
 const DEFAULT_DOWNLOAD_METHOD: DownloadMethod = DownloadMethod::YtDlp;
 const DEFAULT_TRANSCRIPT_VIA: &str = "openai";
@@ -104,27 +106,14 @@ impl Display for ContentType {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum DownloadMethod {
-    /// `yt-dlp` - Use yt-dlp to download the content.
-    YtDlp,
-}
-
-impl Display for DownloadMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            DownloadMethod::YtDlp => write!(f, "yt-dlp"),
-        }
-    }
-}
-
+#[derive(Debug)]
 pub enum SourceError {
     FetchError(reqwest::Error),
     // It would be nice to have an accumulating Result type where we can
     // try multiple parsers and accumulate the errors if all of them fail.
     // TODO.
     ParseError(String),
+    AudioDownloadError(std::io::Error),
 }
 
 impl From<reqwest::Error> for SourceError {
@@ -133,11 +122,18 @@ impl From<reqwest::Error> for SourceError {
     }
 }
 
+impl From<std::io::Error> for SourceError {
+    fn from(err: std::io::Error) -> Self {
+        SourceError::AudioDownloadError(err)
+    }
+}
+
 impl Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             SourceError::FetchError(err) => write!(f, "Fetch error: {}", err),
             SourceError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            SourceError::AudioDownloadError(err) => write!(f, "Audio download error: {}", err),
         }
     }
 }
@@ -209,6 +205,10 @@ impl Feed {
 }
 
 impl SourceItem {
+    pub fn from_url_and_title(url: String, title: String) -> Self {
+        SourceItem::Static(StaticItem { url, title })
+    }
+
     pub fn get_audio_link(&self) -> Option<String> {
         match self {
             SourceItem::Rss(item) => {
@@ -229,9 +229,7 @@ impl SourceItem {
         }
     }
 
-    pub async fn download_audio(&self) -> Result<Vec<u8>, SourceError> {
-        let audio_link = self.get_audio_link().ok_or(SourceError::ParseError("No audio link found".to_string()))?;
-        let content = reqwest::get(&audio_link).await?.bytes().await?;
-        Ok(content.to_vec())
+    pub async fn download_audio(&self, method: DownloadMethod) -> Result<Vec<u8>, SourceError> {
+        fetch(self, method)
     }
 }
