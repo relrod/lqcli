@@ -135,13 +135,16 @@ async fn main() {
                 for source in filtered_sources {
                     println!("Syncing source: {}", source.name);
 
-                    let lesson_titles_resp = lingq_client.get_lesson_titles(&source.language, source.course_id).await;
-                    let lesson_titles = lesson_titles_resp.unwrap_or_else(|e| {
-                        eprintln!("Error getting lesson titles for {}: {}", source.name, e);
-                        vec![]
-                    });
+                    let lesson_titles = lingq_client
+                        .get_lesson_titles(&source.language, source.course_id)
+                        .await
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error getting lesson titles for {}: {}", source.name, e);
+                            vec![]
+                        });
 
                     // Latest 5 items (this number should be configurable)
+                    // TODO: Don't use Feed directly; support other content types
                     let items = match source::Feed::from_source(&source).await {
                         Ok(feed) => feed.items(5),
                         Err(e) => {
@@ -150,8 +153,20 @@ async fn main() {
                         }
                     };
                     for item in items {
-                        // Get the audio url and print it, for now.
-                        let audio_link = item.get_audio_link(&source);
+                        // If the item is already in LingQ, skip it
+                        match &item.title() {
+                            Some(title) => {
+                                if lesson_titles.contains(title) {
+                                    println!("Skipping existing lesson: {}", title);
+                                    continue;
+                                }
+                            }
+                            None => {
+                                eprintln!("No title found for item in {}", source.name);
+                                continue;
+                            }
+                        }
+                        let audio_link = item.get_audio_link();
                         if let Some(audio_link) = audio_link {
                             println!("{}: {}", item.title().unwrap_or("<unknown>".to_string()), audio_link);
                         } else {
