@@ -5,12 +5,22 @@ use std::fmt::Display;
 use tabled::Tabled;
 
 const DEFAULT_CONTENT_TYPE: ContentType = ContentType::RssAtom;
-const DEFAULT_DOWNLOAD_METHOD: &str = "yt-dlp";
+const DEFAULT_DOWNLOAD_METHOD: DownloadMethod = DownloadMethod::YtDlp;
 const DEFAULT_TRANSCRIPT_VIA: &str = "openai";
 
 #[derive(Deserialize)]
 #[serde(transparent)]
 pub struct Tags(pub Option<Vec<String>>);
+
+impl Display for Tags {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.0 {
+            Some(tags) => write!(f, "{}", tags.join(", ")),
+            None => write!(f, ""),
+        }?;
+        Ok(())
+    }
+}
 
 #[derive(Deserialize, Tabled)]
 pub struct Source {
@@ -35,7 +45,7 @@ pub struct Source {
     /// many different types of content (not just YouTube). This is the
     /// default.
     #[serde(default = "default_download_method")]
-    pub download_method: String,
+    pub download_method: DownloadMethod,
 
     /// The URL containing to the feed or page to scrape
     #[tabled(skip)]
@@ -85,20 +95,25 @@ pub enum ContentType {
     RssAtom,
 }
 
-impl Display for Tags {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &self.0 {
-            Some(tags) => write!(f, "{}", tags.join(", ")),
-            None => write!(f, ""),
-        }?;
-        Ok(())
-    }
-}
-
 impl Display for ContentType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ContentType::RssAtom => write!(f, "RSS/Atom"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DownloadMethod {
+    /// `yt-dlp` - Use yt-dlp to download the content.
+    YtDlp,
+}
+
+impl Display for DownloadMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            DownloadMethod::YtDlp => write!(f, "yt-dlp"),
         }
     }
 }
@@ -117,7 +132,7 @@ impl From<reqwest::Error> for SourceError {
     }
 }
 
-impl std::fmt::Display for SourceError {
+impl Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             SourceError::FetchError(err) => write!(f, "Fetch error: {}", err),
@@ -130,8 +145,8 @@ fn default_content_type() -> ContentType {
     DEFAULT_CONTENT_TYPE
 }
 
-fn default_download_method() -> String {
-    DEFAULT_DOWNLOAD_METHOD.to_string()
+fn default_download_method() -> DownloadMethod {
+    DEFAULT_DOWNLOAD_METHOD
 }
 
 fn default_transcript_via() -> String {
