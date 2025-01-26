@@ -116,6 +116,15 @@ async fn main() {
         MainSubcommand::Adhoc(args) => {
             let item = source::SourceItem::from_url_and_title(args.url.clone(), args.name.clone());
             let audio = item.download_audio(args.download_method).await.unwrap();
+            if !args.skip_transcribe {
+                let client = openai::OpenAI::new(config.openai);
+                let transcript = client.transcribe(audio).await.unwrap();
+                let postprocessed = client
+                    .postprocess(&transcript)
+                    .await
+                    .unwrap();
+                println!("Transcript: {}", postprocessed);
+            }
         }
         MainSubcommand::Sources(subcommand) => match subcommand {
             SourcesSubcommand::List { tags } => {
