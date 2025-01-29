@@ -47,8 +47,22 @@ enum MainSubcommand {
     #[command(subcommand)]
     Sources(SourcesSubcommand),
 
+    /// Transcribe a single piece of content
+    Transcribe(TranscribeSubcommand),
+
     /// Import a single piece of content
     Adhoc(AdhocSubcommand),
+}
+
+#[derive(Args, Debug)]
+struct TranscribeSubcommand {
+    /// The URL of the content
+    url: String,
+    /// The language code of the content
+    language: String,
+    /// How to download the content. Usually the default of "yt-dlp" is fine.
+    #[arg(long, short = 'm', default_value = "yt-dlp")]
+    download_method: fetch::DownloadMethod,
 }
 
 #[derive(Args, Debug)]
@@ -113,18 +127,20 @@ async fn main() {
     let lingq_client = lingq::LingqClient::new(&config.lingq);
 
     match cli.subcommand {
-        MainSubcommand::Adhoc(args) => {
-            let item = source::SourceItem::from_url_and_title(args.url.clone(), args.name.clone());
+        MainSubcommand::Transcribe(args) => {
+            let item = source::SourceItem::from_url_and_title(&args.url, "Unknown");
             let audio = item.download_audio(args.download_method).await.unwrap();
-            if !args.skip_transcribe {
-                let client = openai::OpenAI::new(config.openai);
-                let transcript = client.transcribe(audio).await.unwrap();
-                let postprocessed = client
-                    .postprocess(&transcript)
-                    .await
-                    .unwrap();
-                println!("Transcript: {}", postprocessed);
-            }
+            // TODO: language is currently unused
+            let client = openai::OpenAI::new(config.openai);
+            let transcript = client.transcribe(audio).await.unwrap();
+            let postprocessed = client
+                .postprocess(&transcript)
+                .await
+                .unwrap();
+            println!("{postprocessed}");
+        }
+        MainSubcommand::Adhoc(args) => {
+            panic!("Not implemented");
         }
         MainSubcommand::Sources(subcommand) => match subcommand {
             SourcesSubcommand::List { tags } => {

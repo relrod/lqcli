@@ -205,8 +205,8 @@ impl Feed {
 }
 
 impl SourceItem {
-    pub fn from_url_and_title(url: String, title: String) -> Self {
-        SourceItem::Static(StaticItem { url, title })
+    pub fn from_url_and_title(url: &str, title: &str) -> Self {
+        SourceItem::Static(StaticItem { url: url.into(), title: title.into() })
     }
 
     pub fn get_audio_link(&self) -> Option<String> {
