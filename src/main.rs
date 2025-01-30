@@ -69,8 +69,8 @@ struct TranscribeSubcommand {
 struct AdhocSubcommand {
     /// The URL of the content to import
     url: String,
-    /// The name of the content to import
-    name: String,
+    /// The title of the content to import
+    title: String,
     /// The language code of the content to import
     language: String,
     /// The course ID to import the content into
@@ -140,7 +140,31 @@ async fn main() {
             println!("{postprocessed}");
         }
         MainSubcommand::Adhoc(args) => {
-            panic!("Not implemented");
+            println!("We ride!");
+            let item = source::SourceItem::from_url_and_title(&args.url, &args.title);
+            println!("Downloading audio...");
+            let audio = item.download_audio(args.download_method).await.unwrap();
+            println!("Houston, we have audio.");
+            let client = openai::OpenAI::new(config.openai);
+            let transcript = if args.skip_transcribe {
+                "".to_string()
+            } else {
+                println!("Throwing audio at OpenAI...");
+                let transcript = client.transcribe(audio.clone()).await.unwrap();
+                println!("We have a transcript.");
+                println!("Post-processing transcript...");
+                let postprocessed = client.postprocess(&transcript).await.unwrap();
+                println!("We've post-processed it.");
+                postprocessed
+            };
+            let course_id = args.course_id;
+            let result = lingq_client
+                .create_lesson(course_id, &args.title, &transcript, Some(audio))
+                .await;
+            match result {
+                Ok(response) => println!("Lesson created successfully: {:?}", response),
+                Err(e) => eprintln!("Error creating lesson: {}", e),
+            }
         }
         MainSubcommand::Sources(subcommand) => match subcommand {
             SourcesSubcommand::List { tags } => {
